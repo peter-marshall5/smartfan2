@@ -15,6 +15,7 @@ import (
 
 const (
   lowTemp = float64(55)
+  medTemp = float64(62)
   highTemp = float64(70)
   dangerousTemp = float64(94)
   tempThreshold = float64(4)
@@ -167,7 +168,11 @@ func calcNewSpeed() {
   lastError = Error
   speedSatisfied = false
   if currTemp < highTemp {
-    speedTarget = 20
+    if currTemp > medTemp {
+      speedTarget = 40
+    } else {
+      speedTarget = 20
+    }
     return
   }
   speedTarget = Error * P + errorAccumulation * I + derivative * D
