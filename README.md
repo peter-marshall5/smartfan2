@@ -1,12 +1,13 @@
 # What is this?
-This is a fan control service for laptops that aims to reduce distracting fan noise as well as smoothing the transitions between speeds.
+This is another fan control service for laptops that aims to reduce distracting fan noise as well as smoothing the transitions between speeds.
 # How it Works
-This program runs as a systemd service in the background to monitor temperatures and adjust fan speeds accordingly. It uses [the acpi-ec driver by MusiKid](https://github.com/MusiKid/acpi_ec) to read from and write to the embedded controller (EC) in order to set fan speeds.
+This program runs as a systemd service in the background to monitor temperatures and adjust fan speeds accordingly. It uses [the acpi-ec driver by MusiKid](https://github.com/MusiKid/acpi_ec) to read from and write to the embedded controller (EC) in order to set fan speeds. The built-in EC debug interface would also probably work as well.
+A tuned PID algorithm is used to reduce fan noise. Passive cooling or low fan speeds are used whenever possible
 # Why not use NBFC?
 NBFC uses Mono Runtime on Linux which is hard to compile and is bloated, taking up excessive amounts of storage. It causes lots of CPU wakeups in the background which can reduce battery life as well as having really basic fan curves and no support for smoothing the transitions between speeds. This program aims to reduce fan noise and smooth the transitions between fan speeds as well as having minimal background CPU usage.
 # How to use
 ```
-Usage of fanctl:
+Usage of smartfan2:
   -debug
         Debug output
   -ec-addr int
@@ -28,32 +29,29 @@ Usage of fanctl:
   -thermal-zone string
         Path to CPU temperature reading (default "/sys/class/hwmon/hwmon5/temp2_input")
 ```
-You can change the options in fanctl.sh.
-The defaults for this program are selected for my specific laptop model (HP 15-db1003ca). You may have to change the name and/or number of the CPU thermal zone sensor. If you have a laptop with a similar model or with the same model of EC, the defaults may work.
+You can change the options in smartfan2.sh.
+The defaults for this program are selected for my specific laptop model (HP 15-db1003ca). You may have to change the name of the CPU thermal zone driver in smartfan2.sh. If you have a laptop with a similar model or with the same model of EC, the defaults may work.
 If it's a different model or vendor, you will need to find the right speed control register address as well as the minimum and maximum speed values and the manual control register address. You can install NBFC and find a working config for your laptop model and look at its contents to find these values. It's also possible that the acpi-ec driver can't access the EC or that none of the registers control the fan speed so this script won't work for you.
 # Installation
 First, you will need to install and load [the acpi-ec driver by MusiKid](https://github.com/MusiKid/acpi_ec) and make sure that /dev/ec exists.
-I created a prebuilt binary for x86 systems for ease of use. If you want, you can compile the program yourself (Optional):
+Then compile the program:
 ```
-rm fanctl
-gccgo fanctl.go -o fanctl -O2
-strip fanctl
-upx --ultra-brute fanctl
+go build smartfan2.go
 ```
 Then, copy the files to their required destinations.
 ```
-sudo cp fanctl fanctl.sh /usr/bin/
-sudo cp fanctl.service /etc/systemd/system
+sudo cp smartfan2 smartfan2.sh /usr/bin/
+sudo cp smartfan2.service /etc/systemd/system
 ```
 Edit the configuration:
 ```
-nano /usr/bin/fanctl.sh
+nano /usr/bin/smartfan2.sh
 ```
 Test the service:
 ```
-sudo /usr/bin/fanctl.sh
+sudo /usr/bin/smartfan2.sh
 ```
 If it controls the fan properly, enable and start the systemd unit.
 ```
-sudo systemctl enable --now fanctl
+sudo systemctl enable --now smartfan2
 ```
