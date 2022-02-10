@@ -17,6 +17,7 @@ const (
   lowTemp = float64(55)
   medTemp = float64(62)
   highTemp = float64(70)
+  throttleTemp = float64(91)
   dangerousTemp = float64(94)
   tempThreshold = float64(4)
 )
@@ -144,7 +145,7 @@ func updateSpeed() {
     Error = currTemp - highTemp
     errorAccumulation = math.Max(math.Min(errorAccumulation + Error * pollInterval, 100), -400)
 
-    if currTemp > oldTemp + tempThreshold || currTemp + tempThreshold < oldTemp {
+    if currTemp > oldTemp + tempThreshold || currTemp + tempThreshold < oldTemp || currTemp >= throttleTemp {
       calcNewSpeed()
       oldTemp = currTemp
     }
