@@ -19,7 +19,9 @@ const (
   highTemp = float64(70)
   throttleTemp = float64(91)
   dangerousTemp = float64(94)
-  tempThreshold = float64(4)
+  tempRiseThreshold = float64(2)
+  tempDropThreshold = float64(12)
+  minMode1Speed = float64(30)
 )
 
 var speedSatisfied = false
@@ -103,8 +105,10 @@ func loop() {
 
 func smoothSpeed() {
   if speedTarget > currSpeed {
-    if currSpeed > 60 {
-      currSpeed += 9
+    if speedTarget > 70 {
+      currSpeed += 20
+    } else if currSpeed > 60 {
+      currSpeed += 10
     } else {
       currSpeed += 20
     }
@@ -145,13 +149,13 @@ func updateSpeed() {
     Error = currTemp - highTemp
     errorAccumulation = math.Max(math.Min(errorAccumulation + Error * pollInterval, 100), -400)
 
-    if currTemp > oldTemp + tempThreshold || currTemp + tempThreshold < oldTemp || currTemp >= throttleTemp {
+    if currTemp > oldTemp + tempRiseThreshold || currTemp + tempDropThreshold < oldTemp || currTemp >= throttleTemp {
       calcNewSpeed()
       oldTemp = currTemp
     }
 
-    if speedTarget < 20 {
-      speedTarget = 20
+    if speedTarget < minMode1Speed {
+      speedTarget = minMode1Speed
       speedSatisfied = false
     }
   }
@@ -162,7 +166,7 @@ func calcNewSpeed() {
   // highTemp is setpoint
   const P = float64(4.2)
   const I = float64(0.1)
-  const D = float64(-3)
+  const D = float64(-2.3)
   // fmt.Println(errorAccumulation)
   var derivative = (Error - lastError) / pollInterval
   // fmt.Println(derivative)
@@ -170,7 +174,7 @@ func calcNewSpeed() {
   speedSatisfied = false
   if currTemp < highTemp {
     if currTemp > medTemp {
-      speedTarget = 40
+      speedTarget = math.Max(speedTarget, 40)
     } else {
       speedTarget = 20
     }
