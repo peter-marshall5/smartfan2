@@ -69,6 +69,9 @@ func main() {
   fmt.Println("SmartFan V2 by petmshall")
   debug("Debug enabled")
 
+  currSpeed = readSpeed()
+  speedTarget = currSpeed
+
   checkManualControl()
   setupCloseHandler()
 
@@ -240,6 +243,14 @@ func checkManualControl() {
     enableManualControl()
     writeSpeed()
   }
+}
+
+func readSpeed() float64 {
+  ecVal := readEC(ecAddr)
+  if debugOn {
+    fmt.Println("Got EC value:", ecVal)
+  }
+  return math.Floor((float64(ecVal) - ecMin) / (ecMax - ecMin) * 100)
 }
 
 func writeSpeed() {
