@@ -200,6 +200,7 @@ func enableManualControl() {
 }
 
 func disableManualControl() {
+  writeEC(ecAddr, int(ecMax))
   writeEC(manualAddr, 0)
 }
 
