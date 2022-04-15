@@ -60,7 +60,7 @@ func main() {
   flag.Int64Var(&manualAddr, "manual-addr", 21, "Address for manual control enable register")
   flag.Int64Var(&readAddr, "read-addr", 17, "Address for current speed register")
   flag.Float64Var(&ecMin, "ec-min", 0, "Minimum value to write to speed control register")
-  flag.Float64Var(&ecMax, "ec-max", 48, "Maximum value to write to speed control register")
+  flag.Float64Var(&ecMax, "ec-max", 59, "Maximum value to write to speed control register")
   flag.Int64Var(&readMin, "read-min", 14, "Minimum value that can be read from current speed register")
   flag.Int64Var(&readMax, "read-max", 54, "Maximum value that can be read from current speed register")
   flag.BoolVar(&debugOn, "debug", false, "Debug output")
