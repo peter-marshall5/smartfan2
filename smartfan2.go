@@ -17,7 +17,7 @@ const (
   lowTemp = float64(55)
   medTemp = float64(62)
   highTemp = float64(70)
-  throttleTemp = float64(91)
+  throttleTemp = float64(85)
   dangerousTemp = float64(94)
   tempRiseThreshold = float64(2)
   tempDropThreshold = float64(12)
