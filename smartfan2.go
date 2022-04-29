@@ -14,14 +14,16 @@ import (
 )
 
 const (
-  lowTemp = float64(55)
+  lowTemp = float64(43)
   medTemp = float64(62)
   highTemp = float64(70)
-  throttleTemp = float64(85)
+  tempSetpoint = float64(60)
+  throttleTemp = float64(84)
   dangerousTemp = float64(94)
   tempRiseThreshold = float64(2)
   tempDropThreshold = float64(12)
-  minMode1Speed = float64(30)
+  minMode1Speed = float64(40)
+  medMode1Speed = float64(51)
 )
 
 var speedSatisfied = false
@@ -29,10 +31,11 @@ var speedTarget = float64(10)
 var currSpeed = float64(0)
 // 0 = passive, 1 = active
 var mode = 1
-var currTemp = float64(20)
+var currTemp = float64(0)
 var oldTemp = float64(0)
-var lastECVal = 100
-var errorAccumulation = float64(0)
+var lastECVal = 256
+var errorAccumulation = float64(-100)
+var avgTemp = float64(100)
 var lastError = float64(0)
 
 var gracefulQuitTried = false
@@ -44,14 +47,17 @@ var manualAddr int64
 var readAddr int64
 var ecMin float64
 var ecMax float64
-var readMin int64
-var readMax int64
+var readMin float64
+var readMax float64
 var debugOn bool
 var Error float64
-var pollInterval = float64(1000 / 400) // Time delta
+var pollInterval = float64(400) // Time delta
 
 var cpuTempLoad = 1
 var fanTempReduction = 1
+
+var manualControlTick = 0
+var checkTempTick = 0
 
 func main() {
   flag.StringVar(&thermalZone, "thermal-zone", "/sys/class/hwmon/hwmon4/temp1_input", "Path to CPU temperature reading")
@@ -61,8 +67,8 @@ func main() {
   flag.Int64Var(&readAddr, "read-addr", 17, "Address for current speed register")
   flag.Float64Var(&ecMin, "ec-min", 0, "Minimum value to write to speed control register")
   flag.Float64Var(&ecMax, "ec-max", 59, "Maximum value to write to speed control register")
-  flag.Int64Var(&readMin, "read-min", 14, "Minimum value that can be read from current speed register")
-  flag.Int64Var(&readMax, "read-max", 54, "Maximum value that can be read from current speed register")
+  flag.Float64Var(&readMin, "read-min", 4, "Minimum value that can be read from current speed register")
+  flag.Float64Var(&readMax, "read-max", 59, "Maximum value that can be read from current speed register")
   flag.BoolVar(&debugOn, "debug", false, "Debug output")
   flag.Parse()
 
@@ -72,12 +78,25 @@ func main() {
   currSpeed = readSpeed()
   speedTarget = currSpeed
 
-  checkManualControl()
+  enableManualControl()
   setupCloseHandler()
 
   loop()
 
-  for range time.Tick(time.Duration(1000 / pollInterval) * time.Millisecond) {
+  for range time.Tick(time.Duration(pollInterval) * time.Millisecond) {
+    if manualControlTick > 10 {
+      checkManualControl()
+      manualControlTick = 0
+    }
+    if checkTempTick > 30 {
+      if mode == 1 {
+        calcNewSpeed()
+        oldTemp = currTemp
+      }
+      checkTempTick = 0
+    }
+    manualControlTick++
+    checkTempTick++
     loop()
   }
 }
@@ -92,7 +111,7 @@ func quit(msg error) {
 
 func debug(msg string) {
   if debugOn {
-    fmt.Print("DEBUG: ")
+    fmt.Print("[INFO] ")
     fmt.Println(msg)
   }
 }
@@ -108,19 +127,19 @@ func loop() {
 
 func smoothSpeed() {
   if speedTarget > currSpeed {
-    if speedTarget > 70 {
+    if math.Abs(currSpeed - speedTarget) > 16 {
       currSpeed += 20
-    } else if currSpeed > 60 {
+    } else if math.Abs(currSpeed - speedTarget) > 8 {
       currSpeed += 10
     } else {
-      currSpeed += 20
+      currSpeed += 4
     }
     if speedTarget < currSpeed {
       currSpeed = speedTarget
       speedSatisfied = true
     }
   } else if speedTarget < currSpeed {
-    currSpeed -= 5
+    currSpeed -= 2
     if speedTarget > currSpeed {
       currSpeed = speedTarget
       speedSatisfied = true
@@ -133,9 +152,10 @@ func smoothSpeed() {
 func updateSpeed() {
   if mode == 0 {
     // Passive cooling
-    // debug("Passive cooling")
-    if currTemp > highTemp {
+    if currTemp > medTemp {
+      debug("Active cooling")
       mode = 1
+      updateSpeed()
     }
     if currSpeed > 0 {
       speedTarget = 0
@@ -143,53 +163,58 @@ func updateSpeed() {
     }
   } else {
     // Active cooling
-    // debug("Active cooling")
 
-    if currTemp < lowTemp {
+    if avgTemp < lowTemp {
+      debug("Passive cooling")
       mode = 0
     }
 
-    Error = currTemp - highTemp
-    errorAccumulation = math.Max(math.Min(errorAccumulation + Error * pollInterval, 100), -400)
+    Error = currTemp - tempSetpoint
+    errorAccumulation = math.Max(math.Min(errorAccumulation + Error * (pollInterval / 1000), 100), -400)
+    avgTemp += (currTemp - avgTemp) * (pollInterval / 1000) / 15
 
     if currTemp > oldTemp + tempRiseThreshold || currTemp + tempDropThreshold < oldTemp || currTemp >= throttleTemp {
       calcNewSpeed()
       oldTemp = currTemp
-    }
-
-    if speedTarget < minMode1Speed {
-      speedTarget = minMode1Speed
-      speedSatisfied = false
     }
   }
 }
 
 func calcNewSpeed() {
   // PID algorithm
-  // highTemp is setpoint
-  const P = float64(4.2)
+  const P = float64(2.2)
   const I = float64(0.1)
-  const D = float64(-2.3)
-  // fmt.Println(errorAccumulation)
+  const D = float64(-4)
+  var newSpeed float64
   var derivative = (Error - lastError) / pollInterval
-  // fmt.Println(derivative)
   lastError = Error
-  speedSatisfied = false
-  if currTemp < highTemp {
-    if currTemp > medTemp {
-      speedTarget = math.Max(speedTarget, 40)
-    } else {
-      speedTarget = 20
-    }
+  if currTemp < medTemp {
+    speedTarget = minMode1Speed
     return
   }
-  speedTarget = Error * P + errorAccumulation * I + derivative * D
-  // fmt.Println(currSpeed)
-  if speedTarget < 20 {
-    speedTarget = 20
+  newSpeed = Error * P + errorAccumulation * I + derivative * D
+  if debugOn {
+    fmt.Print("[PID]  Error: ")
+    fmt.Print(Error)
+    fmt.Print(" Accumulation: ")
+    fmt.Print(errorAccumulation)
+    fmt.Print(" Derivative: ")
+    fmt.Println(derivative)
   }
-  if speedTarget > 100 {
-    speedTarget = 100
+  if newSpeed < minMode1Speed {
+    newSpeed = minMode1Speed
+  }
+  if newSpeed > 100 {
+    newSpeed = 100
+  }
+  // Reject speeds that are too similar
+  if newSpeed > speedTarget || newSpeed < speedTarget - 4 {
+    if debugOn {
+      fmt.Println("[PID]  New speed: ", newSpeed)
+    }
+    speedTarget = newSpeed
+    speedSatisfied = false
+    return
   }
 }
 
@@ -238,20 +263,18 @@ func readTemp() float64 {
 func checkManualControl() {
   if readEC(manualAddr) == 0 {
     debug("Activating manual control")
-    speedTarget = 0
-    speedSatisfied = false
-    mode = 0
     enableManualControl()
+    lastECVal = 256
     writeSpeed()
   }
 }
 
 func readSpeed() float64 {
-  ecVal := readEC(ecAddr)
+  ecVal := readEC(readAddr)
   if debugOn {
-    fmt.Println("Got EC value:", ecVal)
+    fmt.Println("[EC]   Read speed:", ecVal)
   }
-  return math.Floor((float64(ecVal) - ecMin) / (ecMax - ecMin) * 100)
+  return math.Floor((float64(ecVal) - readMin) / (readMax - readMin) * 100)
 }
 
 func writeSpeed() {
@@ -260,8 +283,8 @@ func writeSpeed() {
     lastECVal = ecVal
     writeEC(ecAddr, ecVal)
     if debugOn {
-      fmt.Print("Speed: ", math.Round(currSpeed))
-      fmt.Println("%, Wrote EC value:", ecVal)
+      fmt.Print("[EC]   Wrote speed: ", math.Round(currSpeed))
+      fmt.Println("% Value:", ecVal)
     }
   }
 }
