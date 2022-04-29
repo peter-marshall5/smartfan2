@@ -183,10 +183,10 @@ func updateSpeed() {
 func calcNewSpeed() {
   // PID algorithm
   const P = float64(2.2)
-  const I = float64(0.1)
-  const D = float64(-4)
+  const I = float64(-0.1)
+  const D = float64(.5)
   var newSpeed float64
-  var derivative = (Error - lastError) / pollInterval
+  var derivative = (Error - lastError) / (1000 / pollInterval)
   lastError = Error
   if currTemp < medTemp {
     speedTarget = minMode1Speed
