@@ -24,6 +24,9 @@ const (
   tempDropThreshold = float64(12)
   minMode1Speed = float64(40)
   medMode1Speed = float64(51)
+  P = float64(2.2)
+  I = float64(-0.1)
+  D = float64(.5)
 )
 
 var speedSatisfied = false
@@ -182,9 +185,6 @@ func updateSpeed() {
 
 func calcNewSpeed() {
   // PID algorithm
-  const P = float64(2.2)
-  const I = float64(-0.1)
-  const D = float64(.5)
   var newSpeed float64
   var derivative = (Error - lastError) / (1000 / pollInterval)
   lastError = Error
