@@ -14,19 +14,19 @@ import (
 )
 
 const (
-  lowTemp = float64(43)
+  lowTemp = float64(45)
   medTemp = float64(62)
   highTemp = float64(70)
-  tempSetpoint = float64(60)
+  tempSetpoint = float64(76)
   throttleTemp = float64(84)
   dangerousTemp = float64(94)
   tempRiseThreshold = float64(2)
   tempDropThreshold = float64(12)
-  minMode1Speed = float64(40)
-  medMode1Speed = float64(51)
-  P = float64(2.2)
-  I = float64(-0.1)
-  D = float64(.5)
+  speedDropThreshold = float64(8)
+  minMode1Speed = float64(34)
+  P = float64(6)
+  I = float64(0.17)
+  D = float64(2.4)
 )
 
 var speedSatisfied = false
@@ -37,7 +37,7 @@ var mode = 1
 var currTemp = float64(0)
 var oldTemp = float64(0)
 var lastECVal = 256
-var errorAccumulation = float64(-100)
+var errorAccumulation = float64(0)
 var avgTemp = float64(100)
 var lastError = float64(0)
 
@@ -173,7 +173,7 @@ func updateSpeed() {
     }
 
     Error = currTemp - tempSetpoint
-    errorAccumulation = math.Max(math.Min(errorAccumulation + Error * (pollInterval / 1000), 100), -400)
+    errorAccumulation = math.Max(math.Min(errorAccumulation + Error * (pollInterval / 1000), 500), -100)
     avgTemp += (currTemp - avgTemp) * (pollInterval / 1000) / 15
 
     if currTemp > oldTemp + tempRiseThreshold || currTemp + tempDropThreshold < oldTemp || currTemp >= throttleTemp {
@@ -186,20 +186,22 @@ func updateSpeed() {
 func calcNewSpeed() {
   // PID algorithm
   var newSpeed float64
-  var derivative = (Error - lastError) / (1000 / pollInterval)
   lastError = Error
-  if currTemp < medTemp {
-    speedTarget = minMode1Speed
-    return
+  newSpeed = Error * P + errorAccumulation * I
+  var derivative = (newSpeed - speedTarget) / (1000 / pollInterval)
+  if derivative < 0 {
+    derivative = 0
   }
-  newSpeed = Error * P + errorAccumulation * I + derivative * D
+  newSpeed -= derivative * D
   if debugOn {
     fmt.Print("[PID]  Error: ")
     fmt.Print(Error)
     fmt.Print(" Accumulation: ")
     fmt.Print(errorAccumulation)
     fmt.Print(" Derivative: ")
-    fmt.Println(derivative)
+    fmt.Print(derivative)
+    fmt.Print(" Speed: ")
+    fmt.Println(newSpeed)
   }
   if newSpeed < minMode1Speed {
     newSpeed = minMode1Speed
@@ -208,7 +210,7 @@ func calcNewSpeed() {
     newSpeed = 100
   }
   // Reject speeds that are too similar
-  if newSpeed > speedTarget || newSpeed < speedTarget - 4 {
+  if newSpeed > speedTarget || newSpeed < speedTarget - speedDropThreshold {
     if debugOn {
       fmt.Println("[PID]  New speed: ", newSpeed)
     }
